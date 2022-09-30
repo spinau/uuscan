@@ -1,0 +1,61 @@
+uuscan.h - low-overhead tokenless scanning of lexical elements for use in
+predictive or recursive descent parings.
+
+It could be useful for small command-languages, DSL's, or other ad-hoc
+parsing jobs.
+
+The two main functions provided are:
+
+accept(x) -- scan for a terminal x and return true if x is correctly scanned
+or false if the next element does not match x. Usually used in if statements.
+
+expect(x) -- scan for a terminal x and return if x matches the next element.
+If it doesn't match an error is raised in the form "x expected at [pos]".
+
+In both cases, x is a string literal (char *), a char or char literal, or
+an application-defined terminal name.
+
+Converted terminal values of the most recent accept()/expect() are returned 
+in struct uuscan uu.
+
+Routines for literal matching of strings and characters are provided; 
+terminal matching must be provided by the application.
+
+Usage overview showing a terminal _T_ being defined and used:
+----------------------------------------------------------------------------------
+#define UUTERMINALS X(_T_) ...
+#include "uuscan.h"
+...
+UUDEFINE(_T_)
+{
+    // scanning function for matching and converting (if needed) the
+    // terminal _T_
+
+    // if string beginning at lp matches _T_ and no errors on conversion
+    // or other checks then:
+    return success(lp);
+    // else on any scan or conversion error:
+    return fail(lp);
+    // in general a scanning function will only flag an error for
+    // reporting below in the on_uuerror{ .. } block
+}
+...
+// main loop:
+
+    on_uuerror {
+        // report error message
+        // either exit with error or fall through to read next line
+    }
+
+    uu.line = read_next_line();
+    uu.lp = uu.line
+    ...
+    if (accept(_T_)) {
+        ..
+    }
+
+    expect(_T_);
+----------------------------------------------------------------------------------
+
+More information in uuscan.h and example.c
+
