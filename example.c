@@ -1,4 +1,4 @@
-// uuscan exercise - parse an infix grammar
+// uuscan exercise - parse an arithmetic expression grammar
 // compile: cc example.c 
 
 // expr: 
@@ -29,7 +29,8 @@
 #include <stdlib.h>
 #include <limits.h>
 
-#define UUTERMINALS X(_ident_) X(_int_)
+#define UUTERMINALS X(_ident_) X(_int_) X(_eol_)
+#define UUVAL { int i; }
 #include "uuscan.h"
 
 #define EOL    CHAR('\0')
@@ -57,15 +58,14 @@ UUDEFINE(_ident_)
             ++lp;
         } while (*lp && (isalnum(*lp) || *lp=='_'));
     } else 
-        return fail(lp); // sets uu.faillp with failure position in uu.line
+        return fail(lp); // sets uu.lpfail with failure position in uu.line
 
-    printf("len=%d\n",uu.len);
     return success(lp); // uu.lp is updated with lp on return
 }
 
 UUDEFINE(_int_)
 {
-    if (isdigit(*lp)) { // + and - scanned seperately
+    if (isdigit(*lp)) { // + and - scanned separately
         int d, limit = INT_MAX % 10; // last digit of max long
         int max = INT_MAX / 10; // for overflow check without overflowing
         int val = 0;
@@ -86,10 +86,14 @@ UUDEFINE(_int_)
         return fail(lp);
 }
 
+UUDEFINE(_eol_)
+{
+    return *lp == '\0';
+}
+
 // calculator:
 
-// the base type for calculations
-// this exercise handles only integer types
+// the base type for calculations; this exercise uses int
 typedef int calc_t;
 
 // define some built-in functions:
@@ -158,7 +162,7 @@ primary()
     char id[MAXIDENTLEN+1];
 
     if (accept(_ident_)) {
-        strncpy(id, uu.startlp, i = uu.len>MAXIDENTLEN? MAXIDENTLEN : uu.len);
+        strncpy(id, uu.lpstart, i = uu.len>MAXIDENTLEN? MAXIDENTLEN : uu.len);
         id[i] = '\0';
 
         if (accept(LPAREN)) { // a builtin function call
@@ -247,7 +251,7 @@ calc_t
 expr()
 {
     calc_t n = term();
-    expect(EOL);
+    expect(_eol_);
     return n;
 }
 
@@ -257,16 +261,15 @@ main()
     size_t linesz = 0;
     int len;
 
+    uuterms[_eol_].name = "end of line";
+
     on_uuerror // uuerror() target
         puts(uu.msg);
         // drop through and keep reading input...
 
     while ((len = getline(&uu.line, &linesz, stdin)) > 0) {
-        uu.line[len-1] = '\0';
-        uu.lp = uu.line;
-
-        if (accept("q") || accept("quit"))
-            break;
+        uu.line[len-1] = '\0'; // set up line to parse
+        uu.lp = uu.line; // initialise line ptr
 
         printf(" = %d\n", expr());
     }
