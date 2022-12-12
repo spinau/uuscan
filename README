@@ -6,7 +6,7 @@ parsing jobs where integrating lex and yacc or other tools is too expensive
 and using straight strcmp's too tedious.
 
 The two main functions provided are the self-documenting accept() and expect().
-Errors are typically handled by a non-local goto for instant unwinding of deeplyi
+Errors are typically handled by a non-local goto for instant unwinding of deeply
 nested parsing.
 
 Any number of application-defined terminals can be used without lookup penalty.
@@ -19,13 +19,11 @@ An example application is in example.c
 
 Usage overview showing a terminal _T_ being defined and used:
 
---------------------------------------------------------------------------------------
-
-    // define all terminal names required by app:
+// define all terminal names required by app:
 #define UUTERMINALS X(_T_) ...
 
-    // if terminal scan functions return a converted value such values can be
-    // assigned to an (unnamed) union embedded in the uu struct. define UUVAL like:
+// if terminal scan functions return a converted value such values can be
+// assigned to an (unnamed) union embedded in the uu struct. define UUVAL like:
 #define UUVAL { int i; char *s; }
 
 #include "uuscan.h"
@@ -70,6 +68,3 @@ UUDEFINE(_T_)
     }
 
     expect(_T_);
-
---------------------------------------------------------------------------------------
-
