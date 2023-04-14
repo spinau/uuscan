@@ -23,7 +23,7 @@ Usage overview showing a terminal _T_ being defined and used:
 #define UUTERMINALS X(_T_) ...
 
 // if terminal scan functions return a converted value such values can be
-// assigned to an (unnamed) union embedded in the uu struct. define UUVAL like:
+// assigned to application-defined identifiers in the uu struct. define UUVAL like:
 #define UUVAL { int i; char *s; }
 
 #include "uuscan.h"
