@@ -6,9 +6,12 @@
 // false if the next element is not x.
 
 // expect(x) -- scan for terminal x: if the next element is not x then a 
-// scanning error is raised of the form "x expected at [pos]"
+// scanning error is raised of the form "x expected at [pos]". if a more
+// application-specific error message is desired then use a second argument to override
+// the default message. for example expect(integer, "address or unit number");
+// will produce "expected address or unit number at [pos]" on failure to scan integer.
 
-// in both cases, x is a string literal, char *, char, or char literal, 
+// in accept(x) and expect(x), x is a string literal, char *, char, or char literal, 
 // or an application-defined terminal name. literal matching is provided here, 
 // terminal matching functions are statically defined in the same file as 
 // uuscan.h is included.
@@ -66,6 +69,9 @@
 #ifndef _STRING_H
 #include <string.h>
 #endif
+#ifndef _STDARG_H
+#include <stdarg.h>
+#endif
 //}}}
 
 // define these in application source prior to including uuscan.h:
@@ -115,16 +121,17 @@ static struct uuscan {
     char *lpstart;  // start of matched element
     char *lpfail;   // scan failed ptr into line
     int len;        // length of successfully scanned element
-    char msg[80];   // message str for on_error target to print
+    char *msg;      // ptr to message for on_error target to print; usually local uumsgbuf
     jmp_buf errjmp; // longjmp target for uuerror()
 #ifdef UUDEBUG
     const char *fn;
     int linenum;
 #endif
 #ifdef UUVAL
-    union UUVAL;    // app defined converted terminal values
+    struct UUVAL;    // app defined converted terminal values
 #endif
 } uu;
+static char uumsgbuf[80];
 
 #define UUDEFINE(x) static bool scan##x(char *lp)
 
@@ -179,12 +186,12 @@ skipspace(char *cp)
     return cp;
 }
 
-static inline void msg_str(char *s)
+static inline void msg_str(char *s, int vacout, ...)
 {
     sprintf(uu.msg, "expected \"%s\" at pos %d", s, uuerrorpos());
 }
 
-static inline void msg_char(char c)
+static inline void msg_char(char c, int vacout, ...)
 {
     if (isprint(c))
         sprintf(uu.msg, "expected '%c' at pos %d", c, uuerrorpos());
@@ -192,25 +199,47 @@ static inline void msg_char(char c)
         sprintf(uu.msg, "expected %x at pos %d", c, uuerrorpos());
 }
 
-static inline void msg_term(int t)
+static void msg_term(int t, int vacount, ...)
 {
-    sprintf(uu.msg, "expected %s at pos %d", uuterms[t].name, uuerrorpos());
+    char *cp;
+    if (vacount) {
+        va_list ap;
+        va_start(ap, vacount);
+        cp = va_arg(ap, char *);
+        va_end(ap);
+    } else
+        cp = uuterms[t].name;
+    sprintf(uu.msg, "expected %s at pos %d", cp, uuerrorpos());
 }
 
-#define expect_msg(x) _Generic(x, \
+//{{{ var_arg arg counting
+// (gnu c should have built-in __VA_ARGC__ but doesn't...why?)
+// this is a hack to count number of arguments in a variadic macro
+// works for up to 10 args (last number in _argc_n - 1)
+// (note that __VA_ARGC__ must be able to detect zero arguments as well)
+#ifndef __VA_ARGC__
+#define _argc_n( _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, N, ...) N
+#define _argseq 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0
+#define _argc(...) _argc_n(__VA_ARGS__)
+// count the number of arguments:
+#define __VA_ARGC__(...) _argc(_, ##__VA_ARGS__, _argseq)
+#endif
+//}}}
+
+#define expect_msg(x, ...) _Generic(x, \
     const char*: msg_str, \
     char*: msg_str, \
     char: msg_char, \
     int: msg_term, \
-    default: _unknown)(x)
+    default: _unknown)(x, __VA_ARGC__(__VA_ARGS__),## __VA_ARGS__)
 
-#define expect(x) do{ \
+#define expect(x, ...) do{ \
     if (accept(x)==false) { \
-        expect_msg(x); \
+        expect_msg(x,## __VA_ARGS__); \
         longjmp(uu.errjmp,1); } \
     }while(0)
 
-#define on_uuerror  if (setjmp(uu.errjmp))
+#define on_uuerror  uu.msg = uumsgbuf; if (setjmp(uu.errjmp))
 
 #define uuerror(...) do{ \
     sprintf(uu.msg,## __VA_ARGS__, ""); \
