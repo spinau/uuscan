@@ -30,12 +30,12 @@ Here's a brief overview showing a terminal T being defined and used:
 #include "uuscan.h"
 ...
 
-// scanning function for T; this is defines a function header bool __scan_T(char *lp)
+// scanning function for T; this defines a function header bool __scan_T(char *lp)
 UUDEFINE(T)
 {
     // lp is ptr to the next non-space char of the input line to scan.
 
-    // IF the text beginning at lp matches the fules for T and there are no errors
+    // IF the text beginning at lp matches the rules for T and there are no errors
     // on conversion then 'return success(lp)' will update the global uu.lp pointer
     // to the first char after the current scan.
 
@@ -61,13 +61,16 @@ UUDEFINE(T)
         // either exit with error or fall through to read next line
     }
 
-    // read-eval-process-loop:
+    // read loop:
 
-    uu.line = read_next_line();
-    uu.lp = uu.line;
-    ...
-    if (accept(T)) {
+    while (uu.line = read_next_line()) {
+        uu.lp = uu.line;
         ...
-    }
 
-    expect(T);
+        if (accept(T)) {
+            ...
+        }
+
+        expect(T);
+    }
+}
