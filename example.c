@@ -30,7 +30,10 @@
 #include <limits.h>
 
 #define UUTERMINALS X(_ident_) X(_int_) X(_eol_)
+
+// example uses uuval to return values:
 #define UUVAL { int i; }
+
 #include "uuscan.h"
 
 #define EOL    CHAR('\0')

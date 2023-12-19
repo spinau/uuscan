@@ -16,11 +16,12 @@ Functions for literal matching of strings and characters are provided in uuscan.
 terminal scanning functions must be provided by the application.
 
 An example application is in example.c
+Read the notes in uuscan.h for more information
 
-Usage overview showing a terminal _T_ being defined and used:
+Here's a brief overview showing a terminal T being defined and used:
 
 // define all terminal names required by app:
-#define UUTERMINALS X(_T_) ...
+#define UUTERMINALS X(T) ...
 
 // if terminal scan functions return a converted value such values can be
 // assigned to application-defined identifiers in the uu struct. define UUVAL like:
@@ -29,24 +30,26 @@ Usage overview showing a terminal _T_ being defined and used:
 #include "uuscan.h"
 ...
 
-// scanning function for _T_; this is equivalent to 'bool scan_T_(char *lp)'
-UUDEFINE(_T_)
+// scanning function for T; this is defines a function header bool __scan_T(char *lp)
+UUDEFINE(T)
 {
     // lp is ptr to the next non-space char of the input line to scan.
 
-    // IF the text beginning at lp matches _T_ and there are no errors on conversion
-    // then 'return success(lp)' will update the global uu.lp pointer to the 1st
-    // char after the current scan.
+    // IF the text beginning at lp matches the fules for T and there are no errors
+    // on conversion then 'return success(lp)' will update the global uu.lp pointer
+    // to the first char after the current scan.
 
     // ELSE on any scan or conversion error 'return fail(lp)' will update
     // uu.lpfail where the scan failed; app parsing code will determine if
     // this is an error or a backtrack condition. 
-    // if an error then normally a call to uuerror(..) is made to format an
+
+    // for error handling normally a call to uuerror(..) is made to format an
     // error message. uuerror() will then jump to the on_uuerror() {...} code
     // block where the error message can be output and a decision made to continue
     // or to exit(1).
 
     // assign converted or saved values to uu.i, uu.s, etc. as declared with UUVAL above
+    // or use a second ptr-to-variable argument in accept() and expect()
 }
 
 ...
@@ -63,8 +66,8 @@ UUDEFINE(_T_)
     uu.line = read_next_line();
     uu.lp = uu.line;
     ...
-    if (accept(_T_)) {
+    if (accept(T)) {
         ...
     }
 
-    expect(_T_);
+    expect(T);

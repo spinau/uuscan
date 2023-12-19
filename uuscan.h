@@ -1,59 +1,138 @@
 // uuscan.h - light-weight helper functions for recursive descent parsing
-//{{{ notes
-// the two main functions provided are:
+// uses _Generic selector, requires C11 or later
+// github.com/spinau/uuscan
 
-// accept(x) -- scan for terminal x: return true if x is correctly scanned, 
-// false if the next element is not x.
+/*{{{ uuscan.h exports; names beginning with underscore not meant for app use
 
-// expect(x) -- scan for terminal x: if the next element is not x then a 
-// scanning error is raised of the form "x expected at [pos]". if a more
-// application-specific error message is desired then use a second argument to override
-// the default message. for example expect(integer, "address or unit number");
-// will produce "expected address or unit number at [pos]" on failure to scan integer.
+Macros
+  accept(t)                             return true if t scan succeeds
+  accept(t, &val)                       return true if t scan succeeds, result in val
+  acceptall(t1, t2, ...)                return true if all terms succeed
+  expect(t)                             "expected" uuerror if t fails
+  expect(t, &val)                       if t succeeds, result in val
+  expect(t, &val, char *failmsg)        if t fails, uuerror is failmsg
+  uuerror(char *fmt, ...)               jump out of parse with an error msg
+  on_uuerror                            following statement or block is uuerror target
+  fail(char *lp)                        fail out of scan with lp at fail point
+  success(char *lp)                     return succesful scan, update uu.lp with lp
+  UUTERMINALS X(t1) X(t2) ...           declare terminals
+  UUDEFINE(t)                           define scan function to terminal t
+  UUDEFINE(t, <type> *v)                with return value ptr
+  CHAR(x)                               same as (char)x for use in accept/expect
 
-// in accept(x) and expect(x), x is a string literal, char *, char, or char literal, 
-// or an application-defined terminal name. literal matching is provided here, 
-// terminal matching functions are statically defined in the same file as 
-// uuscan.h is included.
+Functions
+  uudebug(char *fmt, ...)               stderr messages if UUDEBUG defined
+  char *trimspace(char *)               removes space front and back
+  char *skipspace(char *)               advances over front space
 
-// struct uuscan uu is the interface between accept() expect() and an application
-// holding ptrs to the line being scanned, conversion values, error message, etc.
+Struct
+  uu                                    uuscan internals; app must set uu.line and uu.lp
+}}}*/
+/*{{{ notes
+To set up for uu scanning:
 
-// to define app-specific terminals, define UUTERMINALS before including this header. 
-// at least one terminal must be defined.
+    #define UUTERMINALS X(T1) X(T2) ...      // app-specific scan terminals
+    #include "uuscan.h"
 
-// UUTERMINALS for one or more terminals T are defined in this form:
-// #define UUTERMINALS X(_T_) ...
+To initialise input for uuscanning set the following two pointers:
 
-// an associated 'bool scan_T_(char *lp)' function must also be defined that will
-// return true or false according to a successful or failed scan -- see example.c
-// underscores are optional but serve to identify a terminal type.
+     uu.lp = uu.line = <input string>
 
-// "terminal" is loosely defined. scanning for a terminal usually means
-// scanning a single lexical element, but there is nothing preventing a scanner
-// from processing more complex forms.
+If uuerror() is used then define the error longjmp target with:
 
-// syntax and conversion error handling is done with uuerror() formatted error 
-// messaging which also executes a longjmp to the on_uuerror { ... } block where 
-// the error message can be printed and dealt with. this allows errors to be raised
-// even in deeply nested or recursed parsing without having to unwind the calls 
-// programmatically. the on_uuerror {..} block can print a helpful error message 
-// and either exit(1) or drop through to read the next input line.
+     on_uuerror {
+         ... // e.g. puts(uu.errmsg);
+     }
 
-// because uuscan.h sets up all terminals statically at compile-time this method
-// is best suited to a single-source file for a particular parsing job, at least
-// the part requiring the accept/expect's. this file-separation also allows multiple
-// parsing each with different terminal sets to coexist within one executable.
+The two main functions provided for scanning elements are:
 
-// (this could of course be redesigned to allow for dynamic terminal creation
-// and requiring an init function--but that is "extra weight" for this light-weight
-// approach)
+     accept(x) 
 
-// if compiled with -DUUDEBUG then uudebugf() output is activated
+Scans for terminal x: returns true if x is correctly scanned, false if the
+next element is not x.
 
-// Sep22-SP simplified from a previous version
-//}}}
-//{{{ includes
+     expect(x)
+
+Scans for terminal x: if the next input is not x then a scanning error is 
+raised in the form "x expected at [pos]". If a more application-specific error
+message is desired then use a third argument to override the default message.
+
+     expect(integer, &i, "address or unit number");
+
+will produce "expected address or unit number at [pos]" on failure to scan integer.
+
+x is a string literal, char *, char, or char literal, or an application-defined 
+terminal name (like integer in the above example). Literal matching is provided 
+here for char * and char. The application must provide scanning functions for
+app-defined terminals in the same file as uuscan.h is included.
+
+The mechanism to return converted values from a scan back to the caller
+uses either an appropriately typed address-of as the second argument, or,
+assignment to a UUVAL (union {...} uu) element.
+
+Second argument to accept and expect:
+
+     int i;
+     accept(integer, &i)        // pass address-of variable
+
+     float *f;
+     expect(floatingpoint, &f)  // pass address-of pointer; derefence in scanner
+
+Define UUVAL union:
+    UUVAL { int i; }
+
+Use UUVAL:
+    accept(integer);
+    if (uu.i > 0)
+        ...
+
+A successful scan would typically assign the result to either the dereferenced
+address-of argument or the uu element then return sucess(lp) to update uu.lp.
+
+To define app-specific terminals, define UUTERMINALS before including this header,
+as shown above. At least one terminal must be defined.
+
+An associated scanning function for each T must also be defined. A convenience
+macro UUDEFINE(T) supplies the standard function header that names the scanning
+function and provides the necessary arguments.
+
+    UUDEFINE(T)                 // set up fn header for scan terminal T
+or
+    UUDEFINE(T, <type> *res)    // optional result return ptr
+    {
+        // initial whitespace has been skipped unless matching on space specifically
+        // char *lp is predefined as local ptr to next input
+        ...
+        return fail(lp); // return false and set uu.lpfail ptr
+        ...
+        *res = <result of scan>
+        return success(lp); // return true and update uu.lp to next char of input
+    }
+
+"terminal" is loosely defined. Scanning for a terminal usually means scanning a 
+single lexical element, but there is nothing preventing a scanner from processing
+more complex forms.
+
+Syntax and conversion error handling is done with uuerror() with normal printf()
+style formatting. uuerror() formats the message string and does a longjmp to the
+on_uuerror { ... } block where the error message can be printed or dealt with.
+
+uuerror() allows errors to be raised even in deeply nested or recursed parsing without
+having to unwind the calls programmatically. The on_uuerror { ... } block can print
+an error message and either exit(1) or drop through to collect the next input line.
+
+Because uuscan.h sets up all terminals statically at compile-time this method
+is best suited to a single-source file for a particular parsing job, at least
+the part requiring the accept/expect's. This file-separation also allows multiple
+parsing each with different terminal sets to coexist within one executable.
+
+If compiled with -DUUDEBUG then uudebugf() output is activated when environment
+variabe UUDEBUG is defined.
+
+Sep22-SP simplified from a previous version
+Dec23-SP 2nd arg method of value returns; uu.val retired
+}}}*/
+//{{{ includes & clang silencers
 #ifndef _STDIO_H
 #include <stdio.h>
 #endif
@@ -72,11 +151,16 @@
 #ifndef _STDARG_H
 #include <stdarg.h>
 #endif
+
+#pragma clang diagnostic ignored "-Wformat-extra-args"
+#pragma clang diagnostic ignored "-Wparentheses"
+#pragma clang diagnostic ignored "-Wdeprecated-non-prototype"
+#pragma clang diagnostic ignored "-Wmain-return-type"
+// UUDEFINE(t)/UUDEFINE(t,&v) optional 2nd arg triggers warning:
+#pragma clang diagnostic ignored "-Wc2x-extensions"
 //}}}
 
-// define these in application source prior to including uuscan.h:
-// UUTERMINALS must have at least 1 terminal name declared
-// UUVAL is not required if the scanning functions do not convert values
+// *** declare terminals in application prior to including uuscan.h: ***
 #ifndef UUTERMINALS
 #error define UUTERMINALS with 1 or more terminal names using X(..)
 #endif
@@ -85,66 +169,75 @@
 #define inline __always_inline
 #endif
 
+//{{{ VA_COUNT macro
+// this is a hack to count number of arguments in a variadic macro
+// works for up to 10 args (last number in _argc_n - 1)
+// VA_COUNT must be able to detect zero arguments
+#ifndef VA_COUNT
+#define _ARGC_N( _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, N, ...) N
+#define _ARGSEQ 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0
+#define _ARGC(...) _ARGC_N(__VA_ARGS__)
+// count the number of arguments:
+#define VA_COUNT(...) _ARGC(_, ##__VA_ARGS__, _ARGSEQ)
+#endif
+//}}}
+//{{{ UUDEBUG
 #ifdef UUDEBUG
-void
-printesc(char *s, FILE *f)
-{
-    for ( ; *s; ++s) {
-        if (isprint(*s))
-            fputc(*s, f);
-        else {
-            fputc('\\', f);
-            char in[]  = { '\a', '\b', '\f', '\n', '\r', '\t', '\v', '\0' };
-            char out[] = {  'a',  'b',  'f',  'n',  'r',  't',  'v' };
-            char *cp;
-            if (cp = strchr(in, *s))
-                fputc(out[cp-in], f);
-            else
-                fprintf(f, "%03d", *s);
-        }
-    }
-}
-
-#define uudebugf(...) fprintf(stderr, "%s %d: ", uu.fn, uu.linenum);\
-                      fprintf(stderr, __VA_ARGS__); \
-                      fprintf(stderr, " lp=["); \
-                      printesc(uu.lp, stderr); \
-                      fputc(']', stderr); \
-                      fputc('\n', stderr); 
+#define uudebugf(...) do{                                      \
+        if (getenv("UUDEBUG") == NULL) break;                  \
+        fprintf(stderr, "uuscan: %s %d: ", uu.fn, uu.linenum); \
+        fprintf(stderr, __VA_ARGS__);                          \
+        fprintf(stderr, " lp=[");                              \
+        for (char *cp = uu.lp; *cp; ++cp)                      \
+            if (isprint(*cp))                                  \
+                fputc(*cp, stderr);                            \
+            else                                               \
+                fprintf(stderr, "\\%03o", *cp);                \
+        fputc(']', stderr);                                    \
+        fputc('\n', stderr); }while(0)
 #else
 #define uudebugf(...) /**/
 #endif
+//}}}
 
 static struct uuscan {
-    char *line;     // ptr to current line being scanned
-    char *lp;       // advancing ptr into line updated after scan by accept(),expect()
-    char *lpstart;  // start of matched element
-    char *lpfail;   // scan failed ptr into line
-    int len;        // length of successfully scanned element
-    char *msg;      // ptr to message for on_error target to print; usually local uumsgbuf
-    jmp_buf errjmp; // longjmp target for uuerror()
+    char *line;         // ptr to current line being scanned
+    char *lp;           // advancing ptr into line updated after scan by accept(),expect()
+    char *lpstart;      // start of current input scan
+    char *lpfail;       // scan failed ptr into line
+    int len;            // length of successfully scanned element
+    char *msg;          // ptr to message for on_error target; usually local _uumsgbuf
+    char *failmsg;      // unreported scanning message back to caller
+    void (*callback)(); // if non NULL, callback is called before uuerror() jump is made
+                        // allows for clean-up code prior to uuerror message
+                        // uuerror() will reset to NULL
+    jmp_buf errjmp;     // uuerror() jump target: on_uuerror
 #ifdef UUDEBUG
     const char *fn;
     int linenum;
 #endif
 #ifdef UUVAL
-    struct UUVAL;    // app defined converted terminal values
+    struct UUVAL;       // converted terminal value temporaries
 #endif
 } uu;
-static char uumsgbuf[80];
+static char _uumsgbuf[80];
 
-#define UUDEFINE(x) static bool scan##x(char *lp)
+#define UUDEFINE(...)      _uudefine(VA_COUNT(__VA_ARGS__), __VA_ARGS__)
+#define _uudefine(n,...)   CONCAT(_uudefine,n)(__VA_ARGS__)
+#define _uudefine0(...)    ;
+#define _uudefine1(x)      static bool _scan_##x(char *lp, void *)
+#define _uudefine2(x,res)  static bool _scan_##x(char *lp, res)
 
 // autobuild terminal enum constants:
-#define X(t) t=__COUNTER__,
+#define X(t)  t=__COUNTER__,
 static enum { UUTERMINALS } terms;
 #undef X
 
 // enum must be used to save current __COUNTER__ value
 enum { UUTERMCOUNT = __COUNTER__ };
 
-// autobuild forward decl of scan_T_() functions:
-#define X(t) static bool scan##t();
+// autobuild forward decl of _scan_T_() functions:
+#define X(t)  static bool _scan_##t();
 UUTERMINALS
 #undef X
 
@@ -153,30 +246,105 @@ static struct uuterm {
     bool (*fn)();
     char *name;
 } uuterms[UUTERMCOUNT] = {
-#define X(t) [t]={scan##t, #t},
+#define X(t)  [t]={_scan_##t, #t},
     UUTERMINALS
 };
 #undef X
 
-#ifdef UUDEBUG
-#define accept(x) (uu.fn=__FUNCTION__, uu.linenum=__LINE__, _Generic(x, \
-    const char*: scan_literal, \
-    char*: scan_literal, \
-    char: scan_char, \
-    int: scan_term, \
-    default: _unknown)(x, uu.lp))
+// accept() does nothing
+// accept(t) call scanner t depending on type selection
+// accept(t, &res) call scanner t with appropriate ptr to save successful result
+
+#define accept(...)      _accept(VA_COUNT(__VA_ARGS__), __VA_ARGS__)
+#define _accept(n,...)   CONCAT(_accept,n)(__VA_ARGS__)
+#define _accept0(...)    ;
+#define _accept1(x)      __accept(x, NULL)
+#define _accept2(x,res)  __accept(x, res)
+
+#if UUDEBUG
+#define __accept(x,res)                                   \
+    (uu.fn=__FUNCTION__, uu.linenum=__LINE__, _Generic(x, \
+    const char*: __scan_literal,                          \
+    char*: __scan_literal,                                \
+    char: __scan_char,                                    \
+    int: __scan_term,                                     \
+    default: __unknown3) (x, uu.lp, res))
 #else
-#define accept(x) _Generic(x, \
-    const char*: scan_literal, \
-    char*: scan_literal, \
-    char: scan_char, \
-    int: scan_term, \
-    default: _unknown)(x, uu.lp)
+#define __accept(x,res)                    \
+    _Generic(x,                            \
+    const char*: __scan_literal,           \
+    char*: __scan_literal,                 \
+    char: __scan_char,                     \
+    int: __scan_term,                      \
+    default: __unknown3) (x, uu.lp, res)
 #endif
 
-#define uuerrorpos() (int)((uu.lpfail - uu.line) + 1)
-#define fail(x) (uu.lpfail=(x), false)
-#define success(x) (uu.lp=(x), true)
+#define CONCAT(a,b)         a ## b
+// macros for supporting acceptall(...) with up to 5 terminals
+#define _ACCEPT4(t,...)     __accept(t,NULL) && _ACCEPT3(__VA_ARGS__)
+#define _ACCEPT3(t,...)     __accept(t,NULL) && _ACCEPT2(__VA_ARGS__)
+#define _ACCEPT2(t,...)     __accept(t,NULL) && _ACCEPT1(__VA_ARGS__)
+#define _ACCEPT1(t,...)     __accept(t,NULL) && _ACCEPT0(__VA_ARGS__)
+#define _ACCEPT0(t,...)     __accept(t,NULL)
+#define _ACCEPTALL(n,t,...) CONCAT(_ACCEPT,n)(t, __VA_ARGS__)
+
+// acceptall will call accept() on each argument until failure or all accepted
+// acceptall scans only, does not save scan result (result 2nd arg is null)
+// if any term fails then uu.lp is unchanged
+
+#define acceptall(t,...)                                               \
+        ({ char *savelp = uu.lp; bool r=false;                         \
+        if (_ACCEPTALL(VA_COUNT(__VA_ARGS__), t, __VA_ARGS__)) r=true; \
+        else uu.lp = savelp;                                           \
+        r; })
+
+#define uuerrorpos()        (int)((uu.lpfail - uu.line) + 1)
+
+// fail(cp) will return false from scanner with cp pointing to fail position
+//
+// fail(cp,msg) same as fail(cp), also sets uu.failmsg=msg
+// the optional msg is to return to caller a lexical error that has
+// been detected but not reported. the caller deals with the error
+// either by ignoring, reporting, or recovering as appropriate.
+//
+// [in general, a fail from a scanner indicates the lexical element
+// was not recognised. however, in some cases a lexical error should be caught
+// (e.g., an almost well-formed float format) and this is a way of returning 
+// an error indication without having to resort to uuerror() immediately]
+
+#define _fail_1(x)          (uu.lpfail=(x), uu.failmsg=NULL, false) // VA_COUNT 1
+#define _fail_2(x,y)        (uu.lpfail=(x), uu.failmsg=(y), false)  // VA_COUNT 2
+#define _fail(n,...)        CONCAT(_fail_, n)
+
+#define fail(...)           _fail(VA_COUNT(__VA_ARGS__))(__VA_ARGS__)
+#define success(x)          (uu.lp=(x), true)
+#define expect(...)         _expect(VA_COUNT(__VA_ARGS__), __VA_ARGS__)
+
+#define _expect(n,...)      CONCAT(_expect,n)(__VA_ARGS__)
+#define _expect1(x)         __expect(x, NULL, NULL)
+#define _expect2(x,res)     __expect(x, res, NULL)
+#define _expect3(x,res,msg) __expect(x, res, msg)
+
+#define __expect(x,res,msg) do {        \
+    if (accept(x,res)==false) {         \
+        _expect_msg(x,msg);             \
+        longjmp(uu.errjmp,1); }         \
+    }while(0)
+
+#define _expect_msg(x, msg) _Generic(x, \
+    const char*: _msg_str,              \
+    char*: _msg_str,                    \
+    char: _msg_char,                    \
+    int: _msg_term,                     \
+    default: __unknown2)(x, msg)
+
+#define on_uuerror  uu.msg = _uumsgbuf; if (setjmp(uu.errjmp))
+
+#define uuerror(...) do{                                  \
+    sprintf(uu.msg,## __VA_ARGS__, "");                   \
+    if (uu.callback) { uu.callback(); uu.callback=NULL; } \
+    longjmp(uu.errjmp,1);                                 \
+    } while(0)
 
 static inline char *
 skipspace(char *cp)
@@ -186,102 +354,66 @@ skipspace(char *cp)
     return cp;
 }
 
-static inline void msg_str(char *s, int vacout, ...)
+static inline char *
+trimspace(char *cp)
 {
-    sprintf(uu.msg, "expected \"%s\" at pos %d", s, uuerrorpos());
+    cp = skipspace(cp);
+    char *end = cp + strlen(cp) - 1;
+    while (cp < end && isspace(*end))
+        --end;
+    *(end+1) = '\0';
+    return cp;
 }
-
-static inline void msg_char(char c, int vacout, ...)
-{
-    if (isprint(c))
-        sprintf(uu.msg, "expected '%c' at pos %d", c, uuerrorpos());
-    else
-        sprintf(uu.msg, "expected %x at pos %d", c, uuerrorpos());
-}
-
-static void msg_term(int t, int vacount, ...)
-{
-    char *cp;
-    if (vacount) {
-        va_list ap;
-        va_start(ap, vacount);
-        cp = va_arg(ap, char *);
-        va_end(ap);
-    } else
-        cp = uuterms[t].name;
-    sprintf(uu.msg, "expected %s at pos %d", cp, uuerrorpos());
-}
-
-//{{{ var_arg arg counting
-// (gnu c should have built-in __VA_ARGC__ but doesn't...why?)
-// this is a hack to count number of arguments in a variadic macro
-// works for up to 10 args (last number in _argc_n - 1)
-// (note that __VA_ARGC__ must be able to detect zero arguments as well)
-#ifndef __VA_ARGC__
-#define _argc_n( _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, N, ...) N
-#define _argseq 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0
-#define _argc(...) _argc_n(__VA_ARGS__)
-// count the number of arguments:
-#define __VA_ARGC__(...) _argc(_, ##__VA_ARGS__, _argseq)
-#endif
-//}}}
-
-#define expect_msg(x, ...) _Generic(x, \
-    const char*: msg_str, \
-    char*: msg_str, \
-    char: msg_char, \
-    int: msg_term, \
-    default: _unknown)(x, __VA_ARGC__(__VA_ARGS__),## __VA_ARGS__)
-
-#define expect(x, ...) do{ \
-    if (accept(x)==false) { \
-        expect_msg(x,## __VA_ARGS__); \
-        longjmp(uu.errjmp,1); } \
-    }while(0)
-
-#define on_uuerror  uu.msg = uumsgbuf; if (setjmp(uu.errjmp))
-
-#define uuerror(...) do{ \
-    sprintf(uu.msg,## __VA_ARGS__, ""); \
-    longjmp(uu.errjmp,1); \
-    } while(0)
 
 // scan for a single char
 static inline bool
-scan_char(char wanted, char *lp)
+__scan_char(char wanted, char *lp, void *res)
 {
-    uudebugf("scan_char '%c' 0x%02x", wanted, wanted);
+#if UUDEBUG
+    if (isprint(wanted))
+        uudebugf("scan_char '%c'", wanted);
+    else
+        uudebugf("scan_char '\\%03o'", wanted);
+#endif
 
     if (isspace(wanted) && isspace(*lp)) {
         ++lp;
+        if (res) *(char *)res = wanted;
         return success(lp);
     }
 
     lp = skipspace(lp);
 
     if (*lp == wanted) {
-        ++lp;
+        if (*lp) // don't incr past null char
+            ++lp;
+        if (res) *(char *)res = wanted;
         return success(lp);
     }
 
     return fail(lp);
 }
 
-// scan for an app-defined terminal x
+// scan for an app-defined terminal index x
 static inline bool
-scan_term(int x, char *lp) 
+__scan_term(int x, char *lp, void *res) 
 {
-    uudebugf("scan_term %s", uuterms[x].name);
-
     lp = skipspace(lp);
     uu.lpfail = uu.lpstart = lp;
+    uu.failmsg = NULL;
     uu.len = 0;
-    return (uuterms[x].fn)(lp);
+#if UUDEBUG
+    bool ret = (uuterms[x].fn)(lp, res);
+    uudebugf("scan_term %s: %s\n", uuterms[x].name, ret? "success" : "fail");
+    return ret;
+#else
+    return (uuterms[x].fn)(lp, res);
+#endif
 }
 
 // scan for literal text
 static bool
-scan_literal(const char *wanted, char *lp)
+__scan_literal(const char *wanted, char *lp, void *res)
 {
     uudebugf("scan_literal \"%s\"", wanted);
 
@@ -308,20 +440,60 @@ scan_literal(const char *wanted, char *lp)
         return fail(lp);
 
     uu.len = l;
+    if (res) {
+        // this will be cause of core dumps if res not a ptr to ptr
+        char **cp = (char **)res;
+        *cp = uu.lpstart;
+    }
+
     return success(lp);
 }
 
-static inline void
-_unknown(void *x, char *lp)
+// these are never called, they catch unknown type selector in the _Generic(..)
+// accept() with unknown type is a compile error
+static void __unknown3(void *a, void *b, void *c) {}
+static void __unknown2(void *a, void *b) {}
+
+// literal, char, and user-term messages for failed expect()
+
+static void 
+_msg_str(char *s, char *msg)
 {
-    uudebugf("unknown scan type");
+    if (msg == NULL)
+        sprintf(uu.msg, "expected \"%s\" at pos %d", s, uuerrorpos());
+    else
+        sprintf(uu.msg, "%s at pos %d", msg, uuerrorpos());
 }
 
-// accept('x') -- a char constant is promoted to int and would trigger 
-// scan_term in _Generic, so casting to char is required for char literals:
+static void 
+_msg_char(char c, char *msg)
+{
+    if (msg == NULL)
+        sprintf(uu.msg, "%s at pos %d", msg, uuerrorpos());
+    else {
+        if (isprint(c))
+            sprintf(uu.msg, "expected '%c' at pos %d", c, uuerrorpos());
+        else
+            sprintf(uu.msg, "expected '\\%03o' at pos %d", c, uuerrorpos());
+    }
+}
+
+static void 
+_msg_term(int t, char *msg)
+{
+    sprintf(uu.msg, "%s%s at pos %d", 
+            msg==NULL? "expected " : "",
+            msg==NULL? uuterms[t].name : msg, uuerrorpos());
+}
+
+// accept('x') -- a char constant is promoted to int and would select
+// __scan_term in _Generic, so casting to char is required for char literals:
 // accept((char)'x'), or use convenience macros:
 
 #define CHAR(x) (char)x
-//#define EQ  CHAR('=')
-// e.g. accept(CHAR('*')), expect(EQ), etc. 
 
+// e.g.
+// #define EQ  CHAR('=')
+// ...
+// accept(CHAR('*'));
+// expect(EQ);
