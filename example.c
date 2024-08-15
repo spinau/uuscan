@@ -32,7 +32,7 @@
 #define UUTERMINALS X(_ident_) X(_int_) X(_eol_)
 
 // example uses uuval to return values:
-#define UUVAL { int i; }
+#define UUVAL struct { int i; }
 
 #include "uuscan.h"
 

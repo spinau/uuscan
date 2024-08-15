@@ -10,7 +10,7 @@ Macros
   acceptall(t1, t2, ...)                return true if all terms succeed
   expect(t)                             "expected" uuerror if t fails
   expect(t, &val)                       if t succeeds, result in val
-  expect(t, &val, char *failmsg)        if t fails, uuerror is failmsg
+  expect(t, &val, char *msg)            if t fails, uuerror reports msg string
   uuerror(char *fmt, ...)               jump out of parse with an error msg
   on_uuerror                            following statement or block is uuerror target
   fail(char *lp)                        fail out of scan with lp at fail point
@@ -22,7 +22,6 @@ Macros
 
 Functions
   uudebug(char *fmt, ...)               stderr messages if UUDEBUG defined
-  char *trimspace(char *)               removes space front and back
   char *skipspace(char *)               advances over front space
 
 Struct
@@ -68,7 +67,7 @@ app-defined terminals in the same file as uuscan.h is included.
 
 The mechanism to return converted values from a scan back to the caller
 uses either an appropriately typed address-of as the second argument, or,
-assignment to a UUVAL (union {...} uu) element.
+assignment to a UUVAL (union or struct) element if the second argument is omitted.
 
 Second argument to accept and expect:
 
@@ -78,16 +77,17 @@ Second argument to accept and expect:
      float *f;
      expect(floatingpoint, &f)  // pass address-of pointer; derefence in scanner
 
-Define UUVAL union:
-    UUVAL { int i; }
+Alternatively (or in addition), define a UUVAL union or struct:
+    UUVAL struct { int i; }
 
-Use UUVAL:
-    accept(integer);
+Using UUVAL:
+    accept(integer);            // the scanner for 'integer' will assign uu.i
     if (uu.i > 0)
         ...
 
 A successful scan would typically assign the result to either the dereferenced
-address-of argument or the uu element then return sucess(lp) to update uu.lp.
+address-of argument (if present) or the uu element (if defined) then return 
+sucess(lp) to update the line pointer uu.lp.
 
 To define app-specific terminals, define UUTERMINALS before including this header,
 as shown above. At least one terminal must be defined.
@@ -206,8 +206,11 @@ static struct uuscan {
     char *lpstart;      // start of current input scan
     char *lpfail;       // scan failed ptr into line
     int len;            // length of successfully scanned element
+    char ch;            // saves last char literal scanned
     char *msg;          // ptr to message for on_error target; usually local _uumsgbuf
-    char *failmsg;      // unreported scanning message back to caller
+    char *failmsg;      // additional fail message:
+                        // appended to expect() fail uuerror message
+                        // could also be used after failed accept() by caller
     void (*callback)(); // if non NULL, callback is called before uuerror() jump is made
                         // allows for clean-up code prior to uuerror message
                         // uuerror() will reset to NULL
@@ -217,7 +220,9 @@ static struct uuscan {
     int linenum;
 #endif
 #ifdef UUVAL
-    struct UUVAL;       // converted terminal value temporaries
+    UUVAL;              // converted terminal value temporaries, examples:
+                        // #define UUVAL struct { int i; char *str; }
+                        // #define UUVAL union { int i; char *str; }
 #endif
 } uu;
 static char _uumsgbuf[80];
@@ -346,7 +351,7 @@ static struct uuterm {
     longjmp(uu.errjmp,1);                                 \
     } while(0)
 
-static inline char *
+inline static inline char *
 skipspace(char *cp)
 {
     while (isspace(*cp))
@@ -354,19 +359,8 @@ skipspace(char *cp)
     return cp;
 }
 
-static inline char *
-trimspace(char *cp)
-{
-    cp = skipspace(cp);
-    char *end = cp + strlen(cp) - 1;
-    while (cp < end && isspace(*end))
-        --end;
-    *(end+1) = '\0';
-    return cp;
-}
-
 // scan for a single char
-static inline bool
+inline static inline bool
 __scan_char(char wanted, char *lp, void *res)
 {
 #if UUDEBUG
@@ -378,7 +372,8 @@ __scan_char(char wanted, char *lp, void *res)
 
     if (isspace(wanted) && isspace(*lp)) {
         ++lp;
-        if (res) *(char *)res = wanted;
+        if (res)
+            *(char *)res = wanted;
         return success(lp);
     }
 
@@ -387,7 +382,9 @@ __scan_char(char wanted, char *lp, void *res)
     if (*lp == wanted) {
         if (*lp) // don't incr past null char
             ++lp;
-        if (res) *(char *)res = wanted;
+        if (res)
+            *(char *)res = wanted;
+        uu.ch = wanted;
         return success(lp);
     }
 
@@ -468,7 +465,7 @@ _msg_str(char *s, char *msg)
 static void 
 _msg_char(char c, char *msg)
 {
-    if (msg == NULL)
+    if (msg)
         sprintf(uu.msg, "%s at pos %d", msg, uuerrorpos());
     else {
         if (isprint(c))
@@ -484,6 +481,12 @@ _msg_term(int t, char *msg)
     sprintf(uu.msg, "%s%s at pos %d", 
             msg==NULL? "expected " : "",
             msg==NULL? uuterms[t].name : msg, uuerrorpos());
+
+    if (uu.failmsg) {
+        strcat(uu.msg, " (");
+        strcat(uu.msg, uu.failmsg);
+        strcat(uu.msg, ")");
+    }
 }
 
 // accept('x') -- a char constant is promoted to int and would select
