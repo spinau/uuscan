@@ -209,10 +209,10 @@ primary()
     }
 
     if (accept(MINUS))
-        return -primary();
+        return -term();
 
     if (accept(PLUS))
-        return primary();
+        return term();
 
     if (accept(_int_))
         return uu.i;
