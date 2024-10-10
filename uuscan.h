@@ -21,7 +21,7 @@ Macros
   CHAR(x)                               same as (char)x for use in accept/expect
 
 Functions
-  uudebug(char *fmt, ...)               stderr messages if UUDEBUG defined
+  uudebug(char *fmt, ...)               stderr messages if DEBUG defined
   char *skipspace(char *)               advances over front space
 
 Struct
@@ -87,7 +87,7 @@ Using UUVAL:
 
 A successful scan would typically assign the result to either the dereferenced
 address-of argument (if present) or the uu element (if defined) then return 
-sucess(lp) to update the line pointer uu.lp.
+success(lp) to update the line pointer uu.lp.
 
 To define app-specific terminals, define UUTERMINALS before including this header,
 as shown above. At least one terminal must be defined.
@@ -126,8 +126,8 @@ is best suited to a single-source file for a particular parsing job, at least
 the part requiring the accept/expect's. This file-separation also allows multiple
 parsing each with different terminal sets to coexist within one executable.
 
-If compiled with -DUUDEBUG then uudebugf() output is activated when environment
-variabe UUDEBUG is defined.
+If compiled with -DDEBUG then uudebugf() output is activated when environment
+variabe DEBUG=uu is defined.
 
 Sep22-SP simplified from a previous version
 Dec23-SP 2nd arg method of value returns; uu.val retired
@@ -181,10 +181,11 @@ Dec23-SP 2nd arg method of value returns; uu.val retired
 #define VA_COUNT(...) _ARGC(_, ##__VA_ARGS__, _ARGSEQ)
 #endif
 //}}}
-//{{{ UUDEBUG
-#ifdef UUDEBUG
+//{{{ DEBUG
+#ifdef DEBUG
 #define uudebugf(...) do{                                      \
-        if (getenv("UUDEBUG") == NULL) break;                  \
+        if (getenv("DEBUG") == NULL) break;                    \
+        if (strcmp(getenv("DEBUG"), "uu")) break;              \
         fprintf(stderr, "uuscan: %s %d: ", uu.fn, uu.linenum); \
         fprintf(stderr, __VA_ARGS__);                          \
         fprintf(stderr, " lp=[");                              \
@@ -215,7 +216,7 @@ static struct uuscan {
                         // allows for clean-up code prior to uuerror message
                         // uuerror() will reset to NULL
     jmp_buf errjmp;     // uuerror() jump target: on_uuerror
-#ifdef UUDEBUG
+#ifdef DEBUG
     const char *fn;
     int linenum;
 #endif
@@ -266,7 +267,7 @@ static struct uuterm {
 #define _accept1(x)      __accept(x, NULL)
 #define _accept2(x,res)  __accept(x, res)
 
-#if UUDEBUG
+#if DEBUG
 #define __accept(x,res)                                   \
     (uu.fn=__FUNCTION__, uu.linenum=__LINE__, _Generic(x, \
     const char*: __scan_literal,                          \
@@ -363,7 +364,7 @@ skipspace(char *cp)
 inline static inline bool
 __scan_char(char wanted, char *lp, void *res)
 {
-#if UUDEBUG
+#if DEBUG
     if (isprint(wanted))
         uudebugf("scan_char '%c'", wanted);
     else
@@ -399,7 +400,7 @@ __scan_term(int x, char *lp, void *res)
     uu.lpfail = uu.lpstart = lp;
     uu.failmsg = NULL;
     uu.len = 0;
-#if UUDEBUG
+#if DEBUG
     bool ret = (uuterms[x].fn)(lp, res);
     uudebugf("scan_term %s: %s\n", uuterms[x].name, ret? "success" : "fail");
     return ret;
