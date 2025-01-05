@@ -285,6 +285,7 @@ static struct uuterm {
     default: __unknown3) (x, uu.lp, res)
 #endif
 
+#undef CONCAT
 #define CONCAT(a,b)         a ## b
 // macros for supporting acceptall(...) with up to 5 terminals
 #define _ACCEPT4(t,...)     __accept(t,NULL) && _ACCEPT3(__VA_ARGS__)
@@ -352,13 +353,10 @@ static struct uuterm {
     longjmp(uu.errjmp,1);                                 \
     } while(0)
 
-inline static inline char *
-skipspace(char *cp)
-{
-    while (isspace(*cp))
-        ++cp;
-    return cp;
-}
+#ifdef skipspace
+#undef skipspace
+#endif
+#define skipspace(x) ({ while (isspace(*cp)) ++cp; cp; })
 
 // scan for a single char
 inline static inline bool
