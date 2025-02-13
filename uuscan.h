@@ -22,7 +22,6 @@ Macros
 
 Functions
   uudebug(char *fmt, ...)               stderr messages if DEBUG defined
-  char *skipspace(char *)               advances over front space
 
 Struct
   uu                                    uuscan internals; app must set uu.line and uu.lp
@@ -353,10 +352,9 @@ static struct uuterm {
     longjmp(uu.errjmp,1);                                 \
     } while(0)
 
-#ifdef skipspace
-#undef skipspace
+#ifndef SKIPSPACE
+#define SKIPSPACE(x) while(isspace(*x)) ++x
 #endif
-#define skipspace(x) ({ while (isspace(*cp)) ++cp; cp; })
 
 // scan for a single char
 inline static inline bool
@@ -376,7 +374,7 @@ __scan_char(char wanted, char *lp, void *res)
         return success(lp);
     }
 
-    lp = skipspace(lp);
+    SKIPSPACE(lp);
 
     if (*lp == wanted) {
         if (*lp) // don't incr past null char
@@ -394,7 +392,7 @@ __scan_char(char wanted, char *lp, void *res)
 static inline bool
 __scan_term(int x, char *lp, void *res) 
 {
-    lp = skipspace(lp);
+    SKIPSPACE(lp);
     uu.lpfail = uu.lpstart = lp;
     uu.failmsg = NULL;
     uu.len = 0;
@@ -417,7 +415,7 @@ __scan_literal(const char *wanted, char *lp, void *res)
         return *wanted=='\0'? success(lp) : fail(lp); // allows for accept("")
 
     if (!isspace(*wanted)) // if not looking for space, skip over it
-        lp = skipspace(lp);
+        SKIPSPACE(lp);
 
     int l = strlen(wanted);
     uu.lpstart = lp;
