@@ -130,10 +130,10 @@ fn_rand(int ac, calc_t av[])
 }
 
 // table of built in functions
-typedef calc_t (*fnptr_t)(int, calc_t *);
+
 struct fn_list {
     char *name;
-    fnptr_t fn;
+    calc_t (*exec)(int, calc_t *);
 } builtin[] = {
     "min", fn_min,
     "max", fn_max,
@@ -142,14 +142,14 @@ struct fn_list {
 
 #define NELEMS(x) (sizeof(x)/sizeof(x[0]))
 
-fnptr_t
+int
 lookup_fn(char *name)
 {
     for (int i = 0; i < NELEMS(builtin); ++i)
         if (strcmp(builtin[i].name, name) == 0)
-            return builtin[i].fn;
+            return i;
 
-    return NULL;
+    return -1;
 }
     
 #define MAXARGS 10 // max args for function calls
@@ -160,8 +160,8 @@ calc_t primary(), factor(), term(), expr();
 calc_t
 primary()
 {
-    calc_t n, (*fn_call)(), fn_args[MAXARGS];
-    int fn_argc = 0, i;
+    calc_t n, fn_args[MAXARGS];
+    int fn, fn_argc = 0, i;
     char id[MAXIDENTLEN+1];
 
     if (accept(_ident_)) {
@@ -170,7 +170,7 @@ primary()
 
         if (accept(LPAREN)) { // a builtin function call
 
-            if ((fn_call = lookup_fn(id)) == NULL)
+            if ((fn = lookup_fn(id)) == -1)
                 uuerror("unknown function %s", id);
 
             while (1) {
@@ -189,7 +189,7 @@ primary()
                     uuerror("unclosed paren on function call %s", id);
             }
 
-            return (fn_call)(fn_argc, fn_args);
+            return (builtin[fn].exec)(fn_argc, fn_args);
 
         } else {
             // typically, we would look up a symbol table
