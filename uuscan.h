@@ -412,8 +412,9 @@ static struct uuterm {
     longjmp(uu.errjmp,1);                                 \
     } while(0)
 
-#ifndef SKIPSPACE
-#define SKIPSPACE(x) while(isspace(*x)) ++x
+#ifndef skipspace 
+// this skipspace skips all space chars including newline
+#define skipspace(s) ({ char *cp = s; while (isspace(*cp)) ++cp; cp; })
 #endif
 
 // scan for a single char
@@ -434,7 +435,7 @@ __scan_char(char wanted, char *lp, void *res)
         return success(lp);
     }
 
-    SKIPSPACE(lp);
+    lp = skipspace(lp);
 
     if (*lp == wanted) {
         if (*lp) // don't incr past null char
@@ -452,7 +453,7 @@ __scan_char(char wanted, char *lp, void *res)
 static inline bool
 __scan_term(int x, char *lp, void *res) 
 {
-    SKIPSPACE(lp);
+    lp = skipspace(lp);
     uu.lpfail = uu.lpstart = lp;
     uu.failmsg = NULL;
     uu.len = 0;
@@ -475,7 +476,7 @@ __scan_literal(const char *wanted, char *lp, void *res)
         return *wanted=='\0'? success(lp) : fail(lp); // allows for accept("")
 
     if (!isspace(*wanted)) // if not looking for space, skip over it
-        SKIPSPACE(lp);
+        lp = skipspace(lp);
 
     int l = strlen(wanted);
     uu.lpstart = lp;
@@ -551,7 +552,7 @@ _msg_term(int t, char *msg)
 // accept((char)'x'), or use convenience macros:
 
 #define CHAR(x) (char)x
-
+#define EOL (char)'\0'
 // e.g.
 // #define EQ  CHAR('=')
 // ...
