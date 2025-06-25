@@ -1,5 +1,5 @@
-uuscan.h provides single-header low-overhead tokenless helper functions for
-scanning lexical elements in recursive descent parsing (with backtracking).
+uuscan.h provides a lightweight, single-header set of tokenless scanning
+helpers for recognizing lexical elements in recursive descent parsers.
 
 It could be useful for small command-languages, DSL's, or other ad-hoc
 parsing jobs where integrating lex and yacc or other tools is too expensive
