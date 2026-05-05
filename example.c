@@ -1,26 +1,34 @@
 // uuscan exercise - parse an arithmetic expression grammar
 // compile: cc example.c 
 
-// expr: 
-//      term { "," term } eol
-// term: 
-//      factor 
-//      | term "+" factor 
+// expr:
+//      relational eol
+// relational:
+//      term
+//      | term "<" term
+//      | term ">" term
+//      | term "<=" term
+//      | term ">=" term
+//      | term "==" term
+//      | term "!=" term
+// term:
+//      factor
+//      | term "+" factor
 //      | term "-" factor
-// factor: 
+// factor:
 //      primary
-//      | factor "*" expr
-//      | factor "/" expr
+//      | factor "*" primary
+//      | factor "/" primary
 // primary:
 //      identifier
 //      | identifier "(" expr-list ")"
 //      | constant
 //      | "-" primary | "+" primary
-//      | "(" expr ")"
+//      | "(" relational ")"
 // expr-list:
 //      | <empty>
-//      | expr
-//      | expr "," expr
+//      | relational
+//      | relational "," relational
 // constant:
 //      integer
 //      
@@ -28,15 +36,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <errno.h>
 
-#define UUTERMINALS X(_ident_) X(_int_) X(_eol_)
+//#define INTCALC // undefine for floating-point calculations
+
+#define UUTERMINALS X(_ident_) X(number) X(_eol_)
 
 // example uses uuval to return values:
-#define UUVAL struct { int i; }
+#ifdef INTCALC
+#define UUVAL struct { int val; }
+typedef long calc_t;
+#else
+#define UUVAL struct { double val; }
+typedef double calc_t;
+#endif
 
 #include "uuscan.h"
 
-#define EOL    CHAR('\0')
 #define LPAREN CHAR('(')
 #define RPAREN CHAR(')')
 #define MINUS  CHAR('-')
@@ -45,6 +61,12 @@
 #define MUL    CHAR('*')
 #define DIV1   CHAR('/')
 #define DIV2   "÷" // unicode example
+#define LT     CHAR('<')
+#define GT     CHAR('>')
+#define LE     "<="
+#define GE     ">="
+#define EQ     "=="
+#define NE     "!="
 
 // terminal scanners:
 
@@ -66,7 +88,8 @@ UUDEFINE(_ident_)
     return success(lp); // uu.lp is updated with lp on return
 }
 
-UUDEFINE(_int_)
+#ifdef INTCALC
+UUDEFINE(number)
 {
     if (isdigit(*lp)) { // + and - scanned separately
         int d, limit = INT_MAX % 10; // last digit of max long
@@ -82,12 +105,27 @@ UUDEFINE(_int_)
             ++lp;
         }
 
-        uu.i = val;
+        uu.val = val;
         return success(lp);
 
     } else
         return fail(lp);
 }
+#else
+UUDEFINE(number)
+{
+    if (isdigit(*lp)) {
+        errno = 0;
+        uu.val = strtod(lp, &lp);
+        if (lp == NULL)
+            uuerror("coversion error");
+        if (errno == ERANGE)
+            uuerror("overflow on conversion");
+        return success(lp);
+    } else
+        return fail(lp);
+}
+#endif
 
 UUDEFINE(_eol_)
 {
@@ -95,9 +133,6 @@ UUDEFINE(_eol_)
 }
 
 // calculator:
-
-// the base type for calculations; this exercise uses int
-typedef int calc_t;
 
 // define some built-in functions:
 
@@ -114,7 +149,7 @@ fn_min(int ac, calc_t av[])
 calc_t
 fn_max(int ac, calc_t av[])
 {
-    int max = av[0];
+    calc_t max = av[0];
     for (int i = 1; i < ac; ++i)
         if (av[i] > max)
             max = av[i];
@@ -126,7 +161,13 @@ fn_rand(int ac, calc_t av[])
 {
     if (ac != 0)
         puts("arguments in rand() ignored");
-    return (calc_t) rand();
+    calc_t r = (calc_t) rand();
+#ifdef INTCALC
+    printf("\e[90mrand=%ld\e[0m ", r); 
+#else
+    printf("\e[90mrand=%g\e[0m ", r); 
+#endif
+    return r;
 }
 
 // table of built in functions
@@ -155,7 +196,7 @@ lookup_fn(char *name)
 #define MAXARGS 10 // max args for function calls
 #define MAXIDENTLEN 20
 
-calc_t primary(), factor(), term(), expr();
+calc_t primary(), factor(), term(), relational(), expr();
 
 calc_t
 primary()
@@ -178,8 +219,8 @@ primary()
                     break;
 
                 if (fn_argc < MAXARGS)
-                    fn_args[fn_argc++] = term();
-                else 
+                    fn_args[fn_argc++] = relational();
+                else
                     uuerror("function %s: too many args", id);
 
                 if (accept(COMMA))
@@ -203,7 +244,7 @@ primary()
     }
 
     if (accept(LPAREN)) {
-        n = term();
+        n = relational();
         expect(RPAREN);
         return n;
     }
@@ -214,8 +255,8 @@ primary()
     if (accept(PLUS))
         return term();
 
-    if (accept(_int_))
-        return uu.i;
+    if (accept(number))
+        return uu.val;
 
     uuerror("syntax error at pos %d", uuerrorpos());
 }
@@ -251,9 +292,32 @@ term()
 }
 
 calc_t
+relational()
+{
+    calc_t left = term();
+
+    // Check for relational operators
+    // Note: Check two-char operators before single-char ones
+    if (accept(LE))
+        return left <= term();
+    else if (accept(GE))
+        return left >= term();
+    else if (accept(EQ))
+        return left == term();
+    else if (accept(NE))
+        return left != term();
+    else if (accept(LT))
+        return left < term();
+    else if (accept(GT))
+        return left > term();
+
+    return left;
+}
+
+calc_t
 expr()
 {
-    calc_t n = term();
+    calc_t n = relational();
     expect(_eol_);
     return n;
 }
@@ -273,7 +337,10 @@ main()
     while ((len = getline(&uu.line, &linesz, stdin)) > 0) {
         uu.line[len-1] = '\0'; // set up line to parse
         uu.lp = uu.line; // initialise line ptr
-
-        printf(" = %d\n", expr());
+#ifdef INTCALC
+        printf(" = %ld\n", expr());
+#else
+        printf(" = %g\n", expr());
+#endif
     }
 }
