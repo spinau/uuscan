@@ -373,7 +373,7 @@ static struct uuterm {
         r; \
 })
 
-#define uuerrorpos() (ptrdiff_t)(uu.lpfail - uu.line)
+#define uuerrorpos() (ptrdiff_t)(uu.lpfail - uu.line + 1)
 
 // fail(cp) will return false from scanner with cp pointing to fail position
 //
@@ -424,9 +424,15 @@ static struct uuterm {
         longjmp(uu.errjmp,1); \
     } while(0)
 
-#ifndef skipspace 
-// this skipspace skips all space chars including newline
-#define skipspace(s) ({ char *cp = s; while (isspace(*cp)) ++cp; cp; })
+#ifndef _skipspace_
+static inline char *
+skipspace(char *s)
+{
+	if (*s > ' ') return s;
+	while (isspace(*s)) ++s;
+	return s;
+}
+#define _skipspace_
 #endif
 
 // scan for a single char
@@ -526,9 +532,9 @@ static void
 _msg_str(char *s, char *msg)
 {
     if (msg == NULL)
-        sprintf(uu.msg, "expected \"%s\" at pos %d", s, uuerrorpos());
+        sprintf(uu.msg, "expected \"%s\" at pos %td", s, uuerrorpos());
     else
-        sprintf(uu.msg, "%s at pos %d", msg, uuerrorpos());
+        sprintf(uu.msg, "%s at pos %td", msg, uuerrorpos());
 }
 
 // expect() char fail message
@@ -536,12 +542,12 @@ static void
 _msg_char(char c, char *msg)
 {
     if (msg)
-        sprintf(uu.msg, "%s at pos %d", msg, uuerrorpos());
+        sprintf(uu.msg, "%s at pos %td", msg, uuerrorpos());
     else {
         if (isprint(c))
-            sprintf(uu.msg, "expected '%c' at pos %d", c, uuerrorpos());
+            sprintf(uu.msg, "expected '%c' at pos %td", c, uuerrorpos());
         else
-            sprintf(uu.msg, "expected '\\%03o' at pos %d", c, uuerrorpos());
+            sprintf(uu.msg, "expected '\\%03o' at pos %td", c, uuerrorpos());
     }
 }
 
@@ -552,7 +558,7 @@ _msg_term(int t, char *msg)
 	if (msg)
 		sprintf(uu.msg, "%s", msg);
 	else
-		sprintf(uu.msg, "expected %s at pos %d", uuterms[t].name, uuerrorpos());
+		sprintf(uu.msg, "expected %s at pos %td", uuterms[t].name, uuerrorpos());
 
     if (uu.failmsg) {
         strcat(uu.msg, " (");
