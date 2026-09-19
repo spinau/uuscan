@@ -1,3 +1,5 @@
+### #include "uuscan.h"
+
 uuscan.h provides a lightweight, single-header set of tokenless scanning
 helpers for recognizing lexical elements in recursive descent parsers.
 
@@ -18,24 +20,26 @@ terminal scanning functions must be provided by the application.
 An example application is in example.c
 Read the notes in uuscan.h for more information
 
-Here's a brief overview showing a terminal T being defined and used:
+### Usage example
 
-// define all terminal names required by app:
-#define UUTERMINALS X(T) ...
+```c
+// define terminal names and create scanning function template (example):
+#define UUTERMINALS X(T) X(term1) X(term2)
 
 // if terminal scan functions return a converted value such values can be
-// assigned to application-defined identifiers in the uu struct. define UUVAL like:
+// assigned to application-defined identifiers in the uu struct or union:
 #define UUVAL { int i; char *s; }
 
 #include "uuscan.h"
-...
 
 // scanning function for T; this defines a function header bool __scan_T(char *lp)
-UUDEFINE(T)
+UUDEFINE(term1)
 {
-    // lp is ptr to the next non-space char of the input line to scan.
+    // scanner code for term1
 
-    // IF the text beginning at lp matches the rules for T and there are no errors
+    // lp is predefined char *ptr to the next non-space char of uu.line.
+
+    // IF the text beginning at lp matches the rules for term1 and there are no errors
     // on conversion then 'return success(lp)' will update the global uu.lp pointer
     // to the first char after the current scan.
 
@@ -52,12 +56,20 @@ UUDEFINE(T)
     // or use a second ptr-to-variable argument in accept() and expect()
 }
 
-...
+UUDEFINE(term2)
+{
+    // scanner code for term2
+}
 
+// ...
+
+main()
+{
     // declare uuerror() target:
 
     on_uuerror {
-        // report error message
+        // report error message, e.g.
+        puts(uu.msg);
         // either exit with error or fall through to read next line
     }
 
@@ -65,12 +77,16 @@ UUDEFINE(T)
 
     while (uu.line = read_next_line()) {
         uu.lp = uu.line;
-        ...
 
-        if (accept(T)) {
-            ...
+        //...
+
+        if (accept(term1)) {
+
+            // ...
+
         }
 
-        expect(T);
+        expect(term2);
     }
 }
+```
