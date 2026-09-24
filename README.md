@@ -1,13 +1,14 @@
 ### #include "uuscan.h"
 
-uuscan.h provides a lightweight, single-header set of tokenless scanning
-helpers for recognizing lexical elements in recursive descent parsers.
+uuscan.h provides a lightweight, single-header set of scan-as-you-parse helpers
+for recognizing lexical elements in recursive descent parsers without the need
+for a separate tokenizer pass.
 
 It could be useful for small command-languages, DSL's, or other ad-hoc
 parsing jobs where integrating lex and yacc or other tools is too expensive
 and using straight strcmp's too tedious.
 
-The two main functions provided are the self-documenting accept() and expect().
+The two main macro functions provided are the self-documenting accept() and expect().
 Errors are typically handled by a non-local goto for instant unwinding of deeply
 nested parsing.
 
@@ -24,7 +25,7 @@ Read the notes in uuscan.h for more information
 
 ```c
 // define terminal names and create scanning function template (example):
-#define UUTERMINALS X(T) X(term1) X(term2)
+#define UUTERMINALS X(term1) X(term2)
 
 // if terminal scan functions return a converted value such values can be
 // assigned to application-defined identifiers in the uu struct or union:
@@ -32,28 +33,30 @@ Read the notes in uuscan.h for more information
 
 #include "uuscan.h"
 
-// scanning function for T; this defines a function header bool __scan_T(char *lp)
+// scanning function for term1
+// defines a function signature: bool _scan_term1(char *lp, void *res)
 UUDEFINE(term1)
 {
     // scanner code for term1
 
-    // lp is predefined char *ptr to the next non-space char of uu.line.
+    // lp is a char *ptr to the current scan position (skipspace already applied).
+    // *res is a ptr to store the scan result, or NULL if unused.
 
-    // IF the text beginning at lp matches the rules for term1 and there are no errors
-    // on conversion then 'return success(lp)' will update the global uu.lp pointer
-    // to the first char after the current scan.
+    // If the text at lp matches term1's rules, 'return success(lp)' advances
+    // uu.lp past the match -- this is the normal match/no-match path used for
+    // backtracking, NOT an error.
 
-    // ELSE on any scan or conversion error 'return fail(lp)' will update
-    // uu.lpfail where the scan failed; app parsing code will determine if
-    // this is an error or a backtrack condition. 
+    // If the text doesn't match, 'return fail(lp)' leaves uu.lp unchanged and
+    // records uu.lpfail; the caller (accept/expect) decides whether that's a
+    // backtrack or a hard error. Use fail(lp, "msg") instead if the text is
+    // recognized but malformed (e.g. a bad number literal) -- pass the detail
+    // up without forcing an immediate uuerror().
 
-    // for error handling normally a call to uuerror(..) is made to format an
-    // error message. uuerror() will then jump to the on_uuerror() {...} code
-    // block where the error message can be output and a decision made to continue
-    // or to exit(1).
+    // For unrecoverable errors, call uuerror(...) to format a message and jump
+    // to on_uuerror {...}.
 
-    // assign converted or saved values to uu.i, uu.s, etc. as declared with UUVAL above
-    // or use a second ptr-to-variable argument in accept() and expect()
+    // Store converted values in uu.i, uu.s, etc. as your application requires
+    // (see UUVAL above), or via the second ptr-to-variable argument to accept()/expect().
 }
 
 UUDEFINE(term2)
@@ -82,11 +85,13 @@ main()
 
         if (accept(term1)) {
 
+            expect(term2);
+
             // ...
 
-        }
+        } else
+            uuerror("term1 missing");
 
-        expect(term2);
     }
 }
 ```

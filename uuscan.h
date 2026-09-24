@@ -12,9 +12,9 @@ uuscan provides a set of macros to define and use application-specific
 
 The model is:
 
-  • The application defines a set of terminal names.
-  • For each terminal, the application supplies a scan function.
-  • Parsing code uses accept() and expect() to test or require terminals and literals.
+  • User defines one or more terminal names (UUTERMINALS).
+  • For each terminal, the application supplies a scan function (UUDEFINE).
+  • To parse, use accept() and expect() to test or require terminals and literals.
   • On failure, control transfers via longjmp to an on_uuerror statement block.
 
 The framework maintains a single (static) global scan state in struct uu.
@@ -202,6 +202,7 @@ Notes
 #include <string.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <stdlib.h>
 
 #if defined(__clang__)
 #pragma clang diagnostic ignored "-Wformat-extra-args"
