@@ -306,12 +306,12 @@ static char _uumsgbuf[UUMSGLEN];
 // return a scanned value, or uses the global UUVAL struct (or union)
 #define UUDEFINE(...)     _uudefine(VA_COUNT(__VA_ARGS__), __VA_ARGS__)
 #define _uudefine(n,...)  _uuconcat(_uudefine,n)(__VA_ARGS__)
-#define _uudefine1(T)     static bool _scan_##T(char *lp, void *res)
+#define _uudefine1(T)     static bool _scan_##T(char *lp, void *)
 #define _uudefine2(T,typ) static bool _scan_##T(char *lp, typ)
 
 // autobuild terminal enum constants:
 #define X(T,...)  T=__COUNTER__,
-static enum { UUTERMINALS } terms;
+static enum { UUTERMINALS } terms __attribute__((unused));
 #undef X
 
 // enum must be used to save current __COUNTER__ value
@@ -555,8 +555,8 @@ _uuscan_literal(const char *wanted, char *lp, void *res)
 
 // these are never called, they catch unknown type selector in the _Generic(..)
 // accept() with unknown type is a compile error
-static void _uuunknown3(void *a, void *b, void *c) {}
-static void _uuunknown2(void *a, void *b) {}
+static void _uuunknown3(void *, void *, void *) {}
+static void _uuunknown2(void *, void *) {}
 
 // expect() literal fail message
 static void 

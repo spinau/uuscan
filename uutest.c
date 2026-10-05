@@ -11,7 +11,7 @@
 #include <ctype.h>
 
 #define UUTERMINALS \
-    X(ident) \
+    X(ident, char **) \
     X(number, int *)
 
 // exercises the UUVAL global-return mechanism alongside direct-assignment
@@ -34,7 +34,7 @@ static int tests_run = 0, tests_failed = 0;
 //}}}
 
 //{{{ terminal scan functions
-UUDEFINE(ident)
+UUDEFINE(ident, char **res)
 {
     if (!(isalpha(*lp) || *lp == '_'))
         return fail(lp);
@@ -44,7 +44,7 @@ UUDEFINE(ident)
 
     uu.len = (int)(lp - start);
     uu.s = start;                 // UUVAL mechanism
-    if (res) *(char **)res = start; // direct-assignment mechanism
+    if (res) *res = start; // direct-assignment mechanism
 
     return success(lp);
 }

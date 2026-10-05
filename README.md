@@ -8,7 +8,7 @@ It could be useful for small command-languages, DSL's, or other ad-hoc
 parsing jobs where integrating lex and yacc or other tools is too expensive
 and using straight strcmp's too tedious.
 
-The two main macro functions provided are the self-documenting accept() and expect().
+The two main macro functions provided are the self-documenting `accept()` and `expect()` each taking a terminal name or literal to match against input.
 Errors are typically handled by a non-local goto for instant unwinding of deeply
 nested parsing.
 
